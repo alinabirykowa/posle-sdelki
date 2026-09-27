@@ -1,0 +1,39 @@
+# Upload only application source and build inputs. Generated public/ is created
+# on Vercel, so local documents, recordings, sessions and secrets stay local.
+/*
+!/vercel.json
+!/.vercelignore
+!/index.py
+!/requirements.txt
+!/package.json
+
+# Keep directory allow rules without a trailing slash: Vercel's file walker
+# checks the directory name before descending into it.
+!/backend
+/backend/*
+!/backend/*.py
+!/backend/requirements.txt
+
+!/frontend
+/frontend/*
+!/frontend/package.json
+!/frontend/package-lock.json
+!/frontend/index.html
+!/frontend/tsconfig.json
+!/frontend/vite.config.ts
+!/frontend/src
+!/frontend/public
+
+!/scripts
+/scripts/*
+!/scripts/build-vercel.mjs
+
+# Defense in depth for any future files inside the allowed source directories.
+**/.env
+**/.env.*
+**/node_modules/
+**/__pycache__/
+**/*.pyc
+**/*.sqlite*
+**/*.db
+**/.DS_Store

@@ -1,0 +1,39 @@
+# Local working media extracted from the supplied call.
+analysis/call/audio-16k.wav
+analysis/call/frames/
+analysis/call/contact-*.jpg
+analysis/call/clips/
+analysis/call/converted/*.bin
+analysis/call/converted/*.wav
+__pycache__/
+.venv/
+node_modules/
+frontend/dist/
+.env
+.env.*
+!.env.example
+backend/data/
+.pytest_cache/
+*.pyc
+test-results/
+playwright-report/
+analysis/qa/
+.DS_Store
+*.tsbuildinfo
+.vercel/
+# Generated deployment output only; frontend/public contains source assets.
+/public/
+# Supplied recordings, transcripts and presentation originals stay local.
+/analysis/
+/docs/sources/
+# Keep written verification notes, not screenshots, logs or response dumps.
+/docs/verification/*
+!/docs/verification/*.md
+# Private runtime data and credentials must never enter repository history.
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.db
+*-access.txt
+*.pem
+*.key

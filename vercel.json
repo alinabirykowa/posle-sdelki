@@ -1,0 +1,20 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "regions": [
+    "fra1"
+  ],
+  "buildCommand": "node scripts/build-vercel.mjs",
+  "functions": {
+    "index.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{frontend/src/**,frontend/node_modules/**,frontend/public/**,frontend/tests/**,public/**,scripts/**,docs/**,analysis/**,backend/tests/**,backend/data/**,**/.env*,**/__pycache__/**,**/*.pyc,**/*.sqlite*,**/*.db,node_modules/**,.venv/**,.git/**,.vercel/**}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ]
+}

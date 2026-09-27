@@ -1,0 +1,9 @@
+{
+  "name": "posle-sdelki",
+  "private": true,
+  "version": "0.2.0",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm --prefix frontend run build"
+  }
+}

@@ -1,0 +1,2 @@
+# Keep local installs on the same dependency list used by Vercel.
+-r ../requirements.txt

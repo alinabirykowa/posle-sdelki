@@ -23,7 +23,7 @@ analysis/qa/
 .vercel/
 # Generated deployment output only; frontend/public contains source assets.
 /public/
-/output/.presentation-build/
+/output/
 # Supplied recordings, transcripts and presentation originals stay local.
 /analysis/
 /docs/sources/

@@ -93,6 +93,49 @@ def test_empty_history_is_an_invitation_not_a_zero_skill_grade(app):
     assert report["comparison"]["eligible"] is False
     assert report["recommendation"]["kind"] == "start"
     assert all(row["status"] == "not_practiced" and row["evidence"] == [] for row in report["skills"])
+    assert report["negotiator_route"]["active_stage"] == "discover"
+    assert [stage["status"] for stage in report["negotiator_route"]["stages"]] == [
+        "available", "locked", "locked", "locked",
+    ]
+
+
+def test_negotiator_route_unlocks_only_with_saved_skill_evidence():
+    first = attempt(0)
+    report = build_progress([first])
+    route = report["negotiator_route"]
+    assert route["completed_stages"] == 1
+    assert route["active_stage"] == "explain"
+    assert route["stages"][0]["evidence"][0]["quote"] == QUESTION
+    assert route["stages"][1]["status"] == "available"
+    assert route["stages"][2]["status"] == "locked"
+
+    early_argument = attempt(
+        1,
+        text="Предлагаю оставить обязательные задачи к запуску, потому что так мы сохраним дату проекта.",
+    )
+    locked_route = build_progress([early_argument])["negotiator_route"]
+    assert locked_route["stages"][1]["status"] == "locked"
+    assert locked_route["stages"][1]["evidence"] == []
+
+
+def test_independent_route_stage_needs_all_three_skills_in_one_unguided_attempt():
+    preview = build_preview(TrainingConfig(**CONFIG))
+    session = engine.new_session(
+        "scope", "deadline", "hard", "demo", "one",
+        scenario_snapshot=preview["scenario"], training_config=preview["configuration"],
+        context_key=preview["context_key"], max_turns=preview["max_turns"],
+    )
+    session["mentor_state"].update({"mode": "independent", "used": False})
+    say(session, QUESTION)
+    say(session, "Предлагаю оставить обязательные задачи к запуску, потому что так мы сохраним дату проекта.")
+    reply = engine.submit_proposal(session, "extend_deadline")
+    engine.add_message(session, "assistant", reply, "proposal_response")
+    say(session, "Что в моём предложении вам не подходит?")
+    engine.finish(session, "no_agreement")
+    route = build_progress([stamp(session, 0)])["negotiator_route"]
+    assert route["completed_stages"] == 4
+    assert route["active_stage"] is None
+    assert all(stage["status"] == "complete" for stage in route["stages"])
 
 
 def test_all_history_above_thirty_is_owner_scoped_and_quotes_stay_private(app):
@@ -238,6 +281,15 @@ def test_different_practice_allowances_are_not_comparable(field, value):
     assert report["observation_scope"]["attempts"] == 1
 
 
+def test_different_route_stage_goals_are_not_compared_as_the_same_learning_attempt():
+    previous, current = attempt(0), attempt(1)
+    previous["route_stage"] = "discover"
+    current["route_stage"] = "explain"
+    report = build_progress([previous, current])
+    assert report["comparison"]["eligible"] is False
+    assert report["observation_scope"]["attempts"] == 1
+
+
 def test_missing_extension_means_zero_and_base_limit_defaults_to_thirty():
     first, second = attempt(0), attempt(1)
     first.pop("max_turns")
@@ -271,6 +323,17 @@ def test_comparable_observations_are_not_scores_and_do_not_skip_empty_previous()
     assert report["comparison"]["eligible"] is False
     assert report["comparison"]["previous"] is None
     assert report["observation_scope"]["attempts"] == 3
+
+
+def test_comparison_shows_each_cited_phrase_with_the_client_reaction():
+    previous, current = attempt(0), attempt(1)
+    comparison = build_progress([previous, current])["comparison"]
+    assert comparison["eligible"] is True
+    before = comparison["previous"]["skills"][0]["evidence"][0]
+    after = comparison["current"]["skills"][0]["evidence"][0]
+    assert before["quote"] == after["quote"] == QUESTION
+    assert before["delivery_tone"] == after["delivery_tone"] == "constructive"
+    assert before["client_reply"] and after["client_reply"]
 
 
 def test_old_help_metadata_and_toggling_cannot_be_called_independent():

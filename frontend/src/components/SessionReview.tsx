@@ -1,10 +1,8 @@
-import { ChevronDown, LoaderCircle, RotateCcw } from "lucide-react";
+import { Award, Check, LoaderCircle, RotateCcw, Target } from "lucide-react";
 import type { Session } from "../types";
-import {
-  reviewAssistance,
-  reviewExercise,
-  reviewObservations,
-} from "../session-review";
+import { reviewAssistance, reviewObservations } from "../session-review";
+import { ROUTE_STAGE_GUIDANCE } from "../progress-api";
+import { UtteranceReviewCards } from "./UtteranceReviewCards";
 import "../review-cabinet.css";
 
 export function SessionReview({
@@ -21,18 +19,6 @@ export function SessionReview({
   onPractice: () => void;
 }) {
   const feedback = session.feedback;
-  const observations = reviewObservations(session);
-  const observed = observations.filter(
-    (item) => item.reviewStatus === "observed",
-  );
-  const exercise = reviewExercise(observations);
-  const missing = observations.find(
-    (item) => item.id === exercise.id && item.reviewStatus === "not_observed",
-  );
-  const hasReply = session.messages.some(
-    (message) =>
-      message.role === "user" && (!message.kind || message.kind === "message"),
-  );
   if (!feedback)
     return (
       <section
@@ -60,27 +46,22 @@ export function SessionReview({
       </section>
     );
 
-  const improvement =
-    missing?.explanation ||
-    (!hasReply
-      ? "В этой попытке нет свободных реплик, по которым можно разобрать ваши приёмы. Начните следующий разговор своими словами."
-      : feedback.improvements[0] ||
-        "В сохранённом разборе нет отдельного замечания. Повторите ситуацию и проверьте, получится ли применить приёмы в другом ответе.");
-  const successNotes = (
-    feedback.strengths.length
-      ? feedback.strengths
-      : observed.map((item) => item.explanation)
-  ).slice(0, 2);
-  const evidenceCount = observed.reduce(
-    (count, item) => count + item.evidence.length,
-    0,
-  );
   const outcome =
     feedback.outcome === "agreement"
-      ? "Договорённость достигнута"
+      ? "Соглашение подтверждено"
       : feedback.outcome === "no_agreement"
-        ? "Итоговые условия не подтверждены"
+        ? "Разговор завершён без соглашения"
         : feedback.title;
+  const observations = reviewObservations(session);
+  const earned = observations.filter(
+    (item) => item.reviewStatus === "observed",
+  );
+  const nextGoal = observations.find(
+    (item) => item.reviewStatus === "not_observed",
+  );
+  const hasUnknown = observations.some(
+    (item) => item.reviewStatus === "unknown",
+  );
 
   return (
     <section
@@ -91,9 +72,15 @@ export function SessionReview({
       <header className="cabinet-review-heading">
         <h2 id="session-review-title">Разбор разговора</h2>
         <p className="cabinet-review-situation">{session.scenario.title}</p>
-        <p className="cabinet-review-saved">Диалог сохранён</p>
         <p className="cabinet-review-outcome">{outcome}</p>
-        <p className="cabinet-review-summary">{feedback.summary}</p>
+        {session.route_stage && (
+          <div className="cabinet-review-goal">
+            <strong>
+              Цель попытки · {ROUTE_STAGE_GUIDANCE[session.route_stage].title}
+            </strong>
+            <p>{ROUTE_STAGE_GUIDANCE[session.route_stage].goal}</p>
+          </div>
+        )}
         <p className="cabinet-review-assistance">{reviewAssistance(session)}</p>
         {(session.extra_turns ?? 0) > 0 && (
           <p className="cabinet-review-assistance">
@@ -103,80 +90,52 @@ export function SessionReview({
         )}
       </header>
 
-      <div className="cabinet-review-findings">
-        <section aria-labelledby="review-strengths-title">
-          <h3 id="review-strengths-title">Что получилось</h3>
-          {successNotes.length ? (
-            <ul>
-              {successNotes.map((text) => (
-                <li key={text}>{text}</li>
-              ))}
-            </ul>
-          ) : (
+      <section
+        className="review-route-recap"
+        aria-labelledby="review-route-title"
+      >
+        <div className="review-route-recap-heading">
+          <Award size={18} aria-hidden="true" />
+          <div>
+            <h3 id="review-route-title">Отметки за эту попытку</h3>
             <p>
-              Пока нет подтверждённых примеров. Это описание этой попытки, а не
-              оценка ваших способностей.
+              Они появляются только для приёмов, подтверждённых вашими
+              репликами.
             </p>
-          )}
-          {observed.length > 0 && (
-            <details className="cabinet-review-evidence">
-              <summary>
-                Реплики, на которых основан разбор{" "}
-                <ChevronDown size={15} aria-hidden="true" />
-              </summary>
-              {observed.map((item) => (
-                <div key={item.id}>
-                  <strong>{item.label}</strong>
-                  {item.evidence.map((evidence) => (
-                    <blockquote
-                      key={`${evidence.message_id}:${evidence.quote}`}
-                    >
-                      «{evidence.quote}»
-                    </blockquote>
-                  ))}
-                </div>
-              ))}
-            </details>
-          )}
-        </section>
-        <section aria-labelledby="review-improvements-title">
-          <h3 id="review-improvements-title">Что улучшить</h3>
-          <p>{improvement}</p>
-          {observations.some(
-            (item) =>
-              item.id === "responded_to_objection" &&
-              item.reviewStatus === "not_practiced",
-          ) && (
-            <p className="cabinet-review-note">
-              Ответ на возражение в этой попытке не проверялся.
-            </p>
-          )}
-        </section>
-      </div>
+          </div>
+        </div>
+        {earned.length > 0 ? (
+          <ul className="review-route-badges">
+            {earned.map((item) => (
+              <li key={item.id}>
+                <Check size={14} aria-hidden="true" />
+                <span>{item.label}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="review-route-empty">
+            {hasUnknown
+              ? "Для части навыков не хватило проверяемых данных. В разборе ниже показано, что известно по каждой реплике."
+              : "В этой попытке пока нет подтверждённых отметок. Ниже можно посмотреть, что улучшить в ответах."}
+          </p>
+        )}
+        {nextGoal && (
+          <p className="review-route-next">
+            <Target size={15} aria-hidden="true" />
+            <span>
+              Следующая цель маршрута: <strong>{nextGoal.label}</strong>
+            </span>
+          </p>
+        )}
+      </section>
+
+      <UtteranceReviewCards session={session} />
 
       <section
         className="cabinet-review-practice"
-        aria-labelledby="review-next-title"
+        aria-label="Дальнейшие действия"
       >
-        <h3 id="review-next-title">В следующей попытке</h3>
-        <p className="cabinet-review-focus">
-          {feedback.next_step || exercise.title}
-        </p>
-        <details className="cabinet-review-exercise">
-          <summary>
-            Как потренироваться: {exercise.title.toLocaleLowerCase("ru")}{" "}
-            <ChevronDown size={16} aria-hidden="true" />
-          </summary>
-          <ol>
-            {exercise.steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-          <p>
-            Разговорчик даст намёк или пример. Для самостоятельной попытки
-            выберите «Самостоятельно» до своей первой реплики.
-          </p>
-        </details>
         <div className="cabinet-review-actions">
           <button
             type="button"
@@ -189,7 +148,11 @@ export function SessionReview({
             ) : (
               <RotateCcw size={17} aria-hidden="true" />
             )}
-            {busy ? "Готовим попытку…" : "Повторить ситуацию"}
+            {busy
+              ? "Готовим попытку…"
+              : session.route_stage
+                ? `Повторить этап: ${ROUTE_STAGE_GUIDANCE[session.route_stage].title}`
+                : "Повторить ситуацию"}
           </button>
           <button
             type="button"
@@ -206,87 +169,6 @@ export function SessionReview({
           </p>
         )}
       </section>
-
-      <div className="cabinet-review-details">
-        <details>
-          <summary>
-            Все наблюдения и рекомендации{" "}
-            <ChevronDown size={16} aria-hidden="true" />
-          </summary>
-          <div className="cabinet-review-detail-body">
-            {observations.map((item) => (
-              <div className="cabinet-review-observation" key={item.id}>
-                <strong>{item.label}</strong>
-                <span>
-                  {item.reviewStatus === "observed"
-                    ? "Есть подтверждённый пример"
-                    : item.reviewStatus === "not_observed"
-                      ? "В этой попытке пример не найден"
-                      : item.reviewStatus === "not_practiced"
-                        ? "Не проверялось в этой попытке"
-                        : "Недостаточно данных для вывода"}
-                </span>
-                {item.reviewStatus !== "not_practiced" && (
-                  <p>{item.explanation}</p>
-                )}
-              </div>
-            ))}
-            {feedback.strengths.length > 2 && (
-              <div className="cabinet-review-saved-notes">
-                <strong>Ещё получилось</strong>
-                <ul>
-                  {feedback.strengths.slice(2).map((text) => (
-                    <li key={text}>{text}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {feedback.improvements.length > 0 && (
-              <div className="cabinet-review-saved-notes">
-                <strong>Рекомендации из сохранённого разбора</strong>
-                <ul>
-                  {feedback.improvements.map((text) => (
-                    <li key={text}>{text}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {observations.length === 0 && (
-              <p>
-                В этой сохранённой попытке нет отдельных наблюдений по приёмам.
-              </p>
-            )}
-            {evidenceCount === 0 && (
-              <p className="cabinet-review-note">
-                Подтверждённые цитаты для наблюдений не сохранены.
-              </p>
-            )}
-          </div>
-        </details>
-        <details>
-          <summary>
-            Весь разговор <ChevronDown size={16} aria-hidden="true" />
-          </summary>
-          <div className="cabinet-review-transcript">
-            {session.messages.map((message) => (
-              <div key={message.id}>
-                <strong>
-                  {message.role === "user"
-                    ? "Вы"
-                    : message.role === "assistant"
-                      ? session.scenario.client_name
-                      : "Событие"}
-                </strong>
-                <p>{message.text}</p>
-              </div>
-            ))}
-          </div>
-        </details>
-      </div>
-      <p className="cabinet-review-method">
-        Разбор опирается на сохранённые реплики этой попытки. Это наблюдения по
-        учебному разговору, а не оценка профессионализма.
-      </p>
     </section>
   );
 }

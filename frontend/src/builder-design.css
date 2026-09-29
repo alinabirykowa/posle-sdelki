@@ -9,6 +9,38 @@
   padding: 36px 40px 72px;
   color: var(--practice-ink);
 }
+.builder-route-goal {
+  max-width: 880px;
+  margin: 0 auto 20px;
+  padding: 18px 21px;
+  border: 1px solid #e5c9b6;
+  border-left: 3px solid #c83c17;
+  border-radius: 0 10px 10px 0;
+  background: #fff8f1;
+}
+.builder-route-goal > span {
+  color: #a43a1c;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+.builder-route-goal h2 {
+  margin: 6px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.025em;
+}
+.builder-route-goal p {
+  margin: 6px 0 0;
+  color: #5f5147;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.builder-route-goal small {
+  display: block;
+  margin-top: 7px;
+  color: #7a6e63;
+  font-size: 11px;
+}
 .training-builder button {
   font-family: inherit;
 }
@@ -1035,7 +1067,7 @@
     font-size: 12px;
   }
   .builder-steps strong {
-    font-size: 12px;
+    font-size: 13px;
   }
   .builder-steps small {
     display: none;
@@ -1050,18 +1082,20 @@
     font-size: 8px;
   }
   .builder-step-title h2 {
-    font-size: 25px;
+    font-size: 27px;
     letter-spacing: -0.8px;
+    line-height: 1.2;
     margin: 9px 0 11px;
   }
   .builder-step-title p {
-    font-size: 12px;
+    font-size: 14px;
+    line-height: 1.65;
   }
   .builder-field {
     margin-bottom: 24px;
   }
   .builder-field legend {
-    font-size: 12px;
+    font-size: 14px;
     gap: 6px;
   }
   .builder-field legend > span {
@@ -1079,12 +1113,12 @@
     border-radius: 13px;
   }
   .builder-choice strong {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-choice small {
     margin-top: 5px;
-    font-size: 12px;
-    line-height: 1.7;
+    font-size: 14px;
+    line-height: 1.6;
   }
   .builder-choice-grid.thirds:not(.time-choices) .builder-choice {
     padding: 15px 41px 15px 15px;
@@ -1106,25 +1140,25 @@
     display: none;
   }
   .builder-topic strong {
-    font-size: 13px;
+    font-size: 14px;
   }
   .builder-topic p {
-    font-size: 12px;
-    line-height: 1.8;
+    font-size: 14px;
+    line-height: 1.6;
   }
   .builder-topic > .choice-indicator {
     margin-top: 2px;
   }
   .builder-select-label {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-select-label select,
   .builder-model-select select {
     font-size: 16px;
   }
   .builder-select-label small {
-    font-size: 12px;
-    line-height: 1.7;
+    font-size: 13px;
+    line-height: 1.6;
   }
   .tone-choice > span {
     position: absolute;
@@ -1149,13 +1183,13 @@
     font-size: 9px;
   }
   .builder-field-hint {
-    font-size: 12px;
+    font-size: 13px;
   }
   .format-choices .builder-choice {
     padding: 18px 13px;
   }
   .format-choices strong {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-beta {
     top: 17px;
@@ -1167,7 +1201,7 @@
     gap: 9px;
   }
   .builder-voice-explainer p {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-actions {
     margin-top: 25px;
@@ -1176,11 +1210,11 @@
   .builder-actions .builder-primary {
     padding: 13px 15px;
     min-height: 49px;
-    font-size: 12px;
+    font-size: 14px;
     gap: 14px;
   }
   .builder-back {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-review-head {
     align-items: start;
@@ -1193,8 +1227,8 @@
     letter-spacing: -1px;
   }
   .builder-review-head p {
-    font-size: 12px;
-    line-height: 1.8;
+    font-size: 14px;
+    line-height: 1.65;
   }
   .builder-edit {
     font-size: 12px;
@@ -1212,7 +1246,7 @@
     font-size: 27px;
   }
   .builder-brief > p {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-mission {
     padding: 16px 13px;
@@ -1222,7 +1256,7 @@
     font-size: 8px;
   }
   .builder-mission p {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-numbers {
     gap: 9px;
@@ -1236,7 +1270,7 @@
   }
   .builder-constraints summary,
   .builder-constraints ul {
-    font-size: 12px;
+    font-size: 14px;
   }
   .builder-ready {
     border-left: 0;
@@ -1260,7 +1294,8 @@
   }
   .builder-ready .builder-ready-note,
   .builder-ready .builder-voice-note {
-    font-size: 12px;
+    font-size: 14px;
+    line-height: 1.65;
   }
 }
 @media (max-width: 370px) {

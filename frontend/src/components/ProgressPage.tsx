@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, LoaderCircle } from "lucide-react";
+import {
+  Award,
+  Check,
+  ChevronDown,
+  Compass,
+  LoaderCircle,
+  Target,
+} from "lucide-react";
 import { errorMessage } from "../api";
 import {
   progressApi,
   type AssistanceKind,
+  type NegotiatorRoute,
   type PracticeProgress,
   type ProgressEvidence,
   type ProgressSkill,
+  type RouteStageId,
   type SkillStatus,
 } from "../progress-api";
 import { plural } from "./UI";
@@ -50,11 +59,143 @@ function skillDescription(skill: ProgressSkill) {
   return `Приём отмечен в ${skill.observed_count} из ${skill.eligible_count} ${plural(skill.eligible_count, ["учтённого разговора", "учтённых разговоров", "учтённых разговоров"])}. Ниже — реплики, на которых основано наблюдение.`;
 }
 
+function NegotiatorRouteView({
+  route,
+  busy,
+  onPractice,
+  onReview,
+}: {
+  route: NegotiatorRoute;
+  busy: boolean;
+  onPractice: (stage: RouteStageId | null) => void;
+  onReview: (sessionId: string) => void;
+}) {
+  const active = route.stages.find((stage) => stage.status === "available");
+  const completion = route.total_stages
+    ? Math.round((route.completed_stages / route.total_stages) * 100)
+    : 0;
+  return (
+    <section
+      className="negotiator-route"
+      aria-labelledby="negotiator-route-title"
+    >
+      <header className="negotiator-route-heading">
+        <div>
+          <span className="negotiator-route-eyebrow">Маршрут практики</span>
+          <h2 id="negotiator-route-title">{route.title}</h2>
+          <p>
+            Проходите задания по очереди. Этап засчитывается, когда приём
+            подтверждён репликой в завершённом разговоре.
+          </p>
+        </div>
+        <div className="negotiator-route-score" aria-label="Прогресс маршрута">
+          <strong>{route.completed_stages}</strong>
+          <span>из {route.total_stages} этапов</span>
+        </div>
+      </header>
+      <div
+        className="negotiator-route-progress"
+        role="progressbar"
+        aria-label="Этапы маршрута пройдены"
+        aria-valuemin={0}
+        aria-valuemax={route.total_stages}
+        aria-valuenow={route.completed_stages}
+      >
+        <span style={{ width: `${completion}%` }} />
+      </div>
+      <aside className="route-mentor">
+        <span className="route-mentor-avatar" aria-hidden="true">
+          <Compass size={19} />
+        </span>
+        <div>
+          <span className="route-mentor-name">Подсказка наставника</span>
+          <p>
+            {active
+              ? active.challenge
+              : "Все этапы маршрута подтверждены вашими репликами. Выберите новую ситуацию и проверьте навыки в другом разговоре."}
+          </p>
+        </div>
+      </aside>
+      <ol className="negotiator-route-stages">
+        {route.stages.map((stage, index) => (
+          <li
+            className={`route-stage route-${stage.status}`}
+            key={stage.id}
+            aria-current={stage.status === "available" ? "step" : undefined}
+          >
+            <span className="route-stage-marker" aria-hidden="true">
+              {stage.status === "complete" ? (
+                <Check size={15} />
+              ) : stage.status === "locked" ? (
+                <span>{String(index + 1)}</span>
+              ) : (
+                <Target size={15} />
+              )}
+            </span>
+            <div className="route-stage-content">
+              <div className="route-stage-title-row">
+                <h3>{stage.title}</h3>
+                <span>
+                  {stage.status === "complete"
+                    ? "Отметка получена"
+                    : stage.status === "available"
+                      ? "Текущий этап"
+                      : "Закрыт"}
+                </span>
+              </div>
+              <p>{stage.challenge}</p>
+              {stage.evidence.map((evidence) => (
+                <figure
+                  className="route-stage-evidence"
+                  key={`${stage.id}:${evidence.session_id}`}
+                >
+                  <blockquote>«{evidence.quote}»</blockquote>
+                  <figcaption>
+                    Подтверждение из «{evidence.title}»
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => onReview(evidence.session_id)}
+                    >
+                      Открыть разбор
+                    </button>
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="negotiator-route-footer">
+        <p>
+          <Award size={16} aria-hidden="true" />
+          {route.rule}
+        </p>
+        <button
+          type="button"
+          className="button primary"
+          disabled={
+            busy || (!active && route.completed_stages < route.total_stages)
+          }
+          onClick={() => onPractice(active?.id ?? null)}
+        >
+          {active
+            ? `Тренировать этап: ${active.title}`
+            : route.completed_stages === route.total_stages
+              ? "Продолжить практику"
+              : "Завершите текущий этап"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function ProgressPage({
   authenticated,
   identityKey,
   onOpen,
   onPractice,
+  onRoutePractice,
   onRetry,
   onReview,
   reviewId,
@@ -63,6 +204,7 @@ export function ProgressPage({
   identityKey: string;
   onOpen: (sessionId: string) => void | Promise<void>;
   onPractice: () => void | Promise<void>;
+  onRoutePractice: (stage: RouteStageId | null) => void | Promise<void>;
   onRetry: (sessionId: string) => void | Promise<void>;
   onReview: (sessionId: string) => void;
   reviewId?: string;
@@ -320,6 +462,16 @@ export function ProgressPage({
               <dd>{data.summary.active}</dd>
             </div>
           </dl>
+          <NegotiatorRouteView
+            route={data.negotiator_route}
+            busy={Boolean(busy)}
+            onPractice={(stage) =>
+              void act("route", () => onRoutePractice(stage))
+            }
+            onReview={(sessionId) =>
+              void act(sessionId, () => onReview(sessionId))
+            }
+          />
           {!selectedReview && !activeConversationId && (
             <section
               className="progress-next"
@@ -477,17 +629,46 @@ export function ProgressPage({
                     const earlier = comparison.previous!.skills.find(
                       (entry) => entry.id === skill.id,
                     );
+                    const renderPoint = (
+                      label: string,
+                      point:
+                        (typeof comparison.current.skills)[number] | undefined,
+                    ) => {
+                      const evidence = point?.evidence[0];
+                      return (
+                        <div className="progress-comparison-side" key={label}>
+                          <small>{label}</small>
+                          <strong>
+                            {point ? STATUS[point.status] : "Нет наблюдений"}
+                          </strong>
+                          {evidence ? (
+                            <>
+                              <blockquote>«{evidence.quote}»</blockquote>
+                              {evidence.delivery_label && (
+                                <span className="comparison-delivery">
+                                  {evidence.delivery_label}
+                                </span>
+                              )}
+                              {evidence.client_reply && (
+                                <p>
+                                  <b>Реакция клиента:</b>{" "}
+                                  {evidence.client_reply}
+                                </p>
+                              )}
+                            </>
+                          ) : (
+                            <p>В этой попытке нет цитаты для этого навыка.</p>
+                          )}
+                        </div>
+                      );
+                    };
                     return (
-                      <div key={skill.id}>
+                      <div className="progress-comparison-skill" key={skill.id}>
                         <strong>{skill.label}</strong>
-                        <span>
-                          <small>Раньше</small>
-                          {earlier ? STATUS[earlier.status] : "Нет наблюдений"}
-                        </span>
-                        <span>
-                          <small>Сейчас</small>
-                          {STATUS[skill.status]}
-                        </span>
+                        <div className="progress-comparison-sides">
+                          {renderPoint("Раньше", earlier)}
+                          {renderPoint("Сейчас", skill)}
+                        </div>
                       </div>
                     );
                   })}

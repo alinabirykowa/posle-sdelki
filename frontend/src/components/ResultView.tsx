@@ -15,6 +15,7 @@ import type { Session } from "../types";
 import { assistanceLabel, trainingSummary } from "../training";
 import { money, number, plural } from "./UI";
 import { TermsSummary } from "./SessionPage";
+import { UtteranceReviewCards } from "./UtteranceReviewCards";
 import "../review-design.css";
 import "../mentor-design.css";
 
@@ -119,6 +120,7 @@ export function ResultView({
           </div>
         </div>
       </section>
+      <UtteranceReviewCards session={session} />
       {agreed && metrics && (
         <>
           <section
@@ -360,31 +362,6 @@ export function ResultView({
           </div>
         </details>
       )}
-      <details className="result-details">
-        <summary>
-          Весь разговор · {session.messages.length}{" "}
-          {plural(session.messages.length, [
-            "сообщение",
-            "сообщения",
-            "сообщений",
-          ])}
-          <ChevronIcon />
-        </summary>
-        <div className="transcript">
-          {session.messages.map((message) => (
-            <div key={message.id}>
-              <strong>
-                {message.role === "user"
-                  ? "Вы"
-                  : message.role === "assistant"
-                    ? session.scenario.client_name
-                    : "Событие"}
-              </strong>
-              <p>{message.text}</p>
-            </div>
-          ))}
-        </div>
-      </details>
       {error && (
         <p className="inline-error" role="alert">
           {error}

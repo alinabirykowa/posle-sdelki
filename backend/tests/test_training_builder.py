@@ -97,6 +97,50 @@ def test_roles_and_tones_change_speech_without_changing_acceptance(client):
     assert len(openings) == len(replies) == len(roles) == 3
 
 
+def test_same_deal_option_changes_outcome_when_the_wording_is_hostile(client):
+    diplomatic = start(client, configuration(difficulty="standard"), "diplomatic").json()
+    hostile = start(client, configuration(difficulty="standard"), "hostile").json()
+
+    clear = say(client, diplomatic, "Что для вас важнее всего в этом проекте?", "diplomatic-question").json()
+    attacked = say(client, hostile, "Вы идиот. Что для вас важнее всего в этом проекте?", "hostile-question").json()
+    assert diplomatic["scenario"]["client_interest"] in clear["messages"][-1]["text"]
+    assert "не буду раскрывать дополнительные детали" in attacked["messages"][-1]["text"]
+
+    accepted = propose(client, clear, "prioritize_swap", "diplomatic-offer").json()
+    rejected = propose(client, attacked, "prioritize_swap", "hostile-offer").json()
+    assert accepted["proposal"]["client_status"] == "accepted"
+    assert rejected["proposal"]["client_status"] == "rejected"
+    assert "прозвучала как давление" in rejected["proposal"]["reason"]
+    assert accepted["proposal"]["terms"] is None
+    assert rejected["proposal"]["terms"] is None
+
+
+def test_two_constructive_turns_reopen_a_guarded_negotiation(client):
+    session = start(client, configuration(difficulty="standard"), "repair").json()
+    session = say(client, session, "Вы идиот. Что для вас важно?", "repair-hostile").json()
+    session = say(client, session, "Давайте уточним, что для вас важно?", "repair-one").json()
+    session = say(client, session, "Понимаю, что дата для вас важна. Давайте обсудим приоритетные задачи.", "repair-two").json()
+    result = propose(client, session, "prioritize_swap", "repair-offer").json()
+    assert result["proposal"]["client_status"] == "accepted"
+    assert "pressure" not in result["proposal"]["reason"].lower()
+
+
+def test_route_stage_is_saved_and_kept_when_the_same_situation_is_retried(client):
+    session = start(
+        client,
+        configuration(difficulty="standard"),
+        "route-goal",
+        route_stage="objection",
+    ).json()
+    assert session["route_stage"] == "objection"
+    retried = client.post(
+        f"/api/sessions/{session['id']}/retry",
+        json={"client_action_id": "route-goal-retry"},
+    )
+    assert retried.status_code == 200, retried.text
+    assert retried.json()["route_stage"] == "objection"
+
+
 @pytest.mark.parametrize("changes", [
     {"industry": "medical"}, {"topic": "other"}, {"difficulty": "easy"},
     {"tone": "rude"}, {"client_role": "administrator"}, {"goal": "budget"},

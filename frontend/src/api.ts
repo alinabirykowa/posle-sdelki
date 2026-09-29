@@ -2,6 +2,7 @@ import type {
   Scenario,
   ReplyMode,
   Session,
+  RouteStageId,
   TrainingConfig,
   TrainingPreview,
 } from "./types";
@@ -46,11 +47,13 @@ export const api = {
     configuration: TrainingConfig,
     mode: "demo" | "live",
     client_action_id: string,
+    route_stage?: RouteStageId,
   ) =>
     request<Session>("/training/start", {
       configuration,
       mode,
       client_action_id,
+      ...(route_stage ? { route_stage } : {}),
     }),
   scenarios: () =>
     request<{

@@ -163,6 +163,8 @@ def create_app(db_path=None):
     def training_start(body: StartBody, request: Request):
         session_id = start_session_id(request.state.owner, body.client_action_id)
         payload = {"configuration": body.configuration.model_dump(), "mode": body.mode}
+        if body.route_stage is not None:
+            payload["route_stage"] = body.route_stage
         # The stable ID scopes deduplication to the browser owner, and the cloud
         # repository uses one transaction for this lock, read and insertion.
         with session_locks.hold(session_id):
@@ -180,6 +182,7 @@ def create_app(db_path=None):
                 training_config=preview["configuration"], context_key=preview["context_key"],
                 max_turns=preview["max_turns"],
                 reply_mode=live.reply_mode(),
+                route_stage=body.route_stage,
             )
             session["id"] = session_id
             session["_start_payload"] = payload
@@ -205,7 +208,8 @@ def create_app(db_path=None):
             session = deepcopy(session)
             analysis = live.analyze(session, body.text) if session["mode"] == "live" else None
             response = engine.process_message(session, body.text, body.client_message_id, analysis=analysis)
-            if session["mode"] == "live" and session.get("reply_mode") == "generated":
+            if (session["mode"] == "live" and session.get("reply_mode") == "generated"
+                    and not session.pop("_skip_generated_reply", False)):
                 response = ai_conversation.generate_reply(session, response)
             return save_reply(session, response, "reply")
 
@@ -249,7 +253,7 @@ def create_app(db_path=None):
                     "scenario_snapshot": previous["scenario"], "training_config": previous["training_config"],
                     "context_key": previous["context_key"], "max_turns": previous["max_turns"],
                 }
-            session = engine.new_session(previous["scenario"]["id"], previous["priority"], previous["difficulty"], previous["mode"], request.state.owner, reply_mode=previous.get("reply_mode", "rules"), **snapshot)
+            session = engine.new_session(previous["scenario"]["id"], previous["priority"], previous["difficulty"], previous["mode"], request.state.owner, reply_mode=previous.get("reply_mode", "rules"), route_stage=previous.get("route_stage"), **snapshot)
             for key in ("catalog_case_id", "catalog_revision"):
                 if key in previous:
                     session[key] = previous[key]

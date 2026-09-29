@@ -80,7 +80,44 @@ export type Metrics = {
   minimum_contribution?: number;
   violation_reasons?: string[];
 };
+export type UtteranceReview = {
+  message_id: string;
+  quote: string;
+  status: "strong" | "improve" | "unclear";
+  verdict: "correct" | "needs_improvement" | "incorrect" | "uncertain";
+  rule: string;
+  explanation: string;
+  improved_reply: string;
+  issues: string[];
+  response_status:
+    "answered" | "partial" | "missed" | "not_question" | "unclear";
+  response_explanation: string;
+  delivery: {
+    tone: "hostile" | "constructive" | "neutral";
+    quote: string;
+    label: string;
+    explanation: string;
+  };
+  problems: {
+    quote: string;
+    title: string;
+    explanation: string;
+    improved_reply: string;
+  }[];
+  context: { message_id: string; quote: string } | null;
+};
+export type ReviewSummary = {
+  assessment: string;
+  strengths: string[];
+  improvements: string[];
+  practice: string[];
+  next_training: string;
+};
 export type Feedback = {
+  review_method?: "rules";
+  review_version?: number;
+  utterance_reviews?: UtteranceReview[];
+  review_summary?: ReviewSummary;
   title: string;
   summary: string;
   outcome: "agreement" | "feasible" | "infeasible" | "no_agreement";
@@ -131,6 +168,7 @@ export type MentorState = {
   counts: Record<MentorAction, number>;
   last_advice: MentorAdvice | null;
 };
+export type RouteStageId = "discover" | "explain" | "objection" | "independent";
 export type Session = {
   id: string;
   scenario: Scenario;
@@ -155,5 +193,6 @@ export type Session = {
   turn_limit?: number;
   generation_method?: "template";
   retry_of?: string;
+  route_stage?: RouteStageId;
   mentor_state?: MentorState;
 };

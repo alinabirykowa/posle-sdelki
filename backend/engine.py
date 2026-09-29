@@ -8,6 +8,8 @@ from uuid import uuid4
 from .scenarios import get_scenario
 from .dialogue import classify_demo, owns_interest_evidence, validate_analysis
 from .feedback import build_dialogue_feedback
+from .utterance_review import build_utterance_review
+from .delivery import advance_client_stance, assess_delivery, client_reaction
 from .responses import message_reply
 from .training import style_reply
 from .coaching import conversation_choices
@@ -31,9 +33,22 @@ def add_message(session, role, text, kind="message"):
     return message
 
 
+def _review_feedback(session):
+    details = build_utterance_review(session)
+    return details, build_dialogue_feedback(session)
+
+
 def public(session):
     # Refresh starters for existing attempts too, without rewriting history.
     view = deepcopy(session)
+    # Completed historical attempts gain the same detailed review on read.
+    # HTTP callers authorize the owner before entering this serializer; only
+    # the response copy changes, never the saved transcript or old outcome.
+    if (view.get("status") == "completed" and isinstance(view.get("feedback"), dict)
+            and view["feedback"].get("review_version") != 3):
+        details, dialogue = _review_feedback(view)
+        view["feedback"].update(details)
+        view["feedback"].update({key: dialogue[key] for key in ("behaviors", "moments")})
     view["extra_turns"] = extra_turns_for(view)
     view["turn_limit"] = turn_limit(view)
     update_suggestions(view)
@@ -45,13 +60,15 @@ def public(session):
     return {key: value for key, value in view.items() if not key.startswith("_")}
 
 
-def new_session(scenario_id, priority, difficulty, mode, owner="", *, scenario_snapshot=None, training_config=None, context_key=None, max_turns=None, reply_mode="rules"):
+def new_session(scenario_id, priority, difficulty, mode, owner="", *, scenario_snapshot=None, training_config=None, context_key=None, max_turns=None, reply_mode="rules", route_stage=None):
     try:
         scenario = deepcopy(scenario_snapshot) if scenario_snapshot is not None else get_scenario(scenario_id)
     except ValueError as error:
         raise RuleError(str(error), 422) from None
     if priority not in {item["id"] for item in scenario["priorities"]}:
         raise RuleError("Этот приоритет не подходит выбранному сценарию.", 422)
+    if route_stage is not None and route_stage not in {"discover", "explain", "objection", "independent"}:
+        raise RuleError("Неизвестный этап маршрута переговорщика.", 422)
     session = {
         "id": str(uuid4()), "scenario": scenario, "priority": priority, "difficulty": difficulty,
         "mode": mode, "reply_mode": "generated" if mode == "live" and reply_mode == "generated" else "rules",
@@ -67,6 +84,8 @@ def new_session(scenario_id, priority, difficulty, mode, owner="", *, scenario_s
             "training_config": deepcopy(training_config), "context_key": context_key,
             "max_turns": max_turns, "generation_method": "template",
         })
+    if route_stage is not None:
+        session["route_stage"] = route_stage
     mode_text = "Деморежим: собеседник отвечает по подготовленным правилам, внешний AI не подключён." if mode == "demo" else "AI-режим: модель анализирует смысл ваших реплик. Ответы клиента и условия формируются по правилам учебного кейса."
     if session["reply_mode"] == "generated":
         mode_text = "AI-собеседник: модель анализирует ваши реплики и формулирует ответы клиента с учётом разговора. Контекст учебного кейса и переписка передаются AI-провайдеру. Модель может ошибаться; действующие условия показаны в карточке проекта."
@@ -148,6 +167,7 @@ def message_is_duplicate(session, text, client_message_id):
 def process_message(session, text, client_message_id, *, analysis=None):
     if message_is_duplicate(session, text, client_message_id):
         return None
+    delivery = assess_delivery(text)
     was_discovered = bool(session["discovered_interests"])
     source = "ai" if analysis is not None else "demo_rules"
     analysis = (
@@ -158,6 +178,7 @@ def process_message(session, text, client_message_id, *, analysis=None):
         # A quoted or disowned question must not unlock the client's priority,
         # even when a provider returns an otherwise valid semantic result.
         analysis = analysis.model_copy(update={"uncertain": True})
+    guarded = advance_client_stance(session, delivery["tone"])
     message = add_message(session, "user", text)
     # The browser can reconcile a lost response after reloading without relying
     # on text equality (the same words may be intentionally sent twice).
@@ -166,20 +187,68 @@ def process_message(session, text, client_message_id, *, analysis=None):
     session["turns"] += 1
     session.setdefault("_dialogue_events", []).append({
         "message_id": message["id"], "source": source, **analysis.model_dump(),
+        "delivery_tone": delivery["tone"], "delivery_quote": delivery["quote"],
     })
     interest = session["scenario"].get("client_interest") or (
         "Мне важно уточнить ожидаемый результат и ограничения обеих сторон."
         if conversation_practice.active(session) else INTERESTS[(session["scenario"]["id"], session["priority"])]
     )
-    if analysis.intent == "ask_interest" and not analysis.uncertain:
+    if analysis.intent == "ask_interest" and not analysis.uncertain and delivery["tone"] != "hostile":
         if interest not in session["discovered_interests"]:
             session["discovered_interests"].append(interest)
             session["_discovery_message_id"] = message["id"]
     update_suggestions(session)
-    return style_reply(session.get("training_config"), message_reply(session, analysis, interest, was_discovered), session["turns"])
+
+    reply = None
+    if conversation_practice.active(session):
+        reviews = build_utterance_review(session)["utterance_reviews"]
+        turn_review = reviews[-1] if reviews else None
+        events_by_message_id = {
+            event.get("message_id"): event
+            for event in session.get("_dialogue_events", [])
+            if isinstance(event, dict)
+        }
+        consecutive_repairs = 0
+        for previous_review in reversed(reviews):
+            if not conversation_practice.requires_repair(previous_review):
+                break
+            previous_event = events_by_message_id.get(previous_review.get("message_id"), {})
+            if (
+                not previous_event.get("uncertain")
+                and previous_event.get("intent") in {"ask_interest", "clarify", "justify", "object", "propose"}
+                and previous_review.get("delivery", {}).get("tone") != "hostile"
+            ):
+                break
+            consecutive_repairs += 1
+        meaningful_move = (
+            not analysis.uncertain
+            and analysis.intent in {"ask_interest", "clarify", "justify", "object", "propose"}
+            and delivery["tone"] != "hostile"
+        )
+        repeated_acknowledgement = analysis.intent == "acknowledge" and consecutive_repairs >= 2
+        if not meaningful_move and analysis.intent == "acknowledge" and not repeated_acknowledgement:
+            # A first short acknowledgement is allowed to move the conversation;
+            # repeating it twice triggers a concrete recovery prompt instead.
+            reply = None
+        elif not meaningful_move or delivery["tone"] == "hostile":
+            reply = conversation_practice.repair_reply(session, turn_review, consecutive_repairs)
+        if reply is not None:
+            # A generated client must not overwrite a deterministic repair
+            # prompt with another paraphrased version of the same question.
+            session["_skip_generated_reply"] = True
+
+    if reply is None:
+        reply = message_reply(session, analysis, interest, was_discovered)
+        reply = client_reaction(reply, delivery["tone"], guarded=guarded)
+    return style_reply(session.get("training_config"), reply, session["turns"])
 
 
 def proposal_verdict(session, option_id):
+    if session.get("_client_guarded"):
+        return False, (
+            "Я пока не готов(а) согласовывать условия: предыдущая реплика прозвучала как давление. "
+            "Давайте восстановим спокойное обсуждение и вернёмся к варианту после этого."
+        )
     if conversation_practice.active(session):
         return conversation_practice.proposal_verdict(session, option_id)
     scenario_id, priority = session["scenario"]["id"], session["priority"]
@@ -270,8 +339,10 @@ def finish(session, outcome):
     if outcome == "agreement" and (not proposal or proposal["client_status"] != "accepted"):
         raise RuleError("Сначала отправьте предложение и получите согласие клиента. Или завершите разговор без соглашения.")
     agreed = outcome == "agreement"
+    details, dialogue = _review_feedback(session)
     if conversation_practice.active(session):
-        session["feedback"] = conversation_practice.feedback(session, agreed, build_dialogue_feedback(session))
+        session["feedback"] = conversation_practice.feedback(session, agreed, dialogue)
+        session["feedback"].update(details)
         session["status"] = "completed"
         session["completed_at"] = now()
         session["_finish_outcome"] = outcome
@@ -279,7 +350,6 @@ def finish(session, outcome):
         update_suggestions(session)
         return session
     metrics = metrics_for(session["scenario"], proposal["terms"] if agreed else session["scenario"]["baseline"])
-    dialogue = build_dialogue_feedback(session)
     strengths = dialogue["strengths"]
     improvements = dialogue["improvements"]
     if not agreed:
@@ -306,6 +376,7 @@ def finish(session, outcome):
         "moments": dialogue["moments"], "behaviors": dialogue["behaviors"],
         "next_step": next_step, "strengths": strengths, "improvements": improvements,
     }
+    session["feedback"].update(details)
     session["status"] = "completed"
     session["completed_at"] = now()
     session["_finish_outcome"] = outcome

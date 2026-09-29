@@ -28,10 +28,12 @@ import {
 } from "../recovery";
 import type {
   ReplyMode,
+  RouteStageId,
   Session,
   TrainingConfig,
   TrainingPreview,
 } from "../types";
+import { ROUTE_STAGE_GUIDANCE } from "../progress-api";
 import { money } from "./UI";
 import "../builder-design.css";
 
@@ -184,11 +186,13 @@ export function TrainingBuilder({
   onStart,
   liveAvailable,
   liveReplyMode = "rules",
+  routeStage,
 }: {
   identityKey: string;
   onStart: (session: Session) => void;
   liveAvailable: boolean;
   liveReplyMode?: ReplyMode;
+  routeStage?: RouteStageId | null;
 }) {
   const [config, setConfig] = useState<TrainingConfig>(initialConfig);
   const [step, setStep] = useState(0);
@@ -296,13 +300,20 @@ export function TrainingBuilder({
     setError("");
     const action =
       recovery ??
-      getPendingTrainingStart(identityKey, preview!.configuration, mode);
+      getPendingTrainingStart(
+        identityKey,
+        preview!.configuration,
+        mode,
+        undefined,
+        routeStage ?? undefined,
+      );
     setPendingStart(action);
     try {
       const session = await api.trainingStart(
         action.configuration,
         action.mode,
         action.id,
+        action.route_stage,
       );
       clearPendingTrainingStart(action);
       if (mounted.current) {
@@ -329,9 +340,23 @@ export function TrainingBuilder({
   const role = ROLES.find((x) => x.id === config.client_role)!;
   const tone = TONES.find((x) => x.id === config.tone)!;
   const turnLimit = { 5: 8, 10: 16, 15: 24 }[config.duration_minutes];
+  const selectedRouteStage = routeStage ?? pendingStart?.route_stage;
 
   return (
     <div className="training-builder">
+      {selectedRouteStage && (
+        <section
+          className="builder-route-goal"
+          aria-labelledby="builder-route-goal-title"
+        >
+          <span>ЦЕЛЬ ЭТАПА</span>
+          <h2 id="builder-route-goal-title">
+            {ROUTE_STAGE_GUIDANCE[selectedRouteStage].title}
+          </h2>
+          <p>{ROUTE_STAGE_GUIDANCE[selectedRouteStage].goal}</p>
+          <small>Эта цель сохранится с попыткой и появится в её разборе.</small>
+        </section>
+      )}
       {pendingStart && !busy && (
         <section
           className="builder-recovery"

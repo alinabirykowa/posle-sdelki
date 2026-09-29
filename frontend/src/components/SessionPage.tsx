@@ -27,7 +27,15 @@ import { Loading, Modal, ModeBadge, money } from "./UI";
 import { PracticePace, VoicePractice } from "./VoicePractice";
 import { ConversationCoach } from "./ConversationCoach";
 import { appendTranscript } from "../voice";
+import { ROUTE_STAGE_GUIDANCE } from "../progress-api";
 import "../session-design.css";
+
+const ROUTE_STAGES = [
+  "discover",
+  "explain",
+  "objection",
+  "independent",
+] as const;
 
 export function SessionPage({
   id,
@@ -435,6 +443,22 @@ export function SessionPage({
       <div className="session-heading">
         <div>
           <h1>{scenario.title}</h1>
+          {session.route_stage && (
+            <div className="session-route-goal">
+              <span className="session-route-step">
+                Этап {ROUTE_STAGES.indexOf(session.route_stage) + 1} из{" "}
+                {ROUTE_STAGES.length}
+              </span>
+              <strong>
+                Миссия · {ROUTE_STAGE_GUIDANCE[session.route_stage].title}
+              </strong>
+              <p>{ROUTE_STAGE_GUIDANCE[session.route_stage].goal}</p>
+              <span className="session-route-reward">
+                Отметка появится в маршруте, если приём подтвердится в вашей
+                реплике.
+              </span>
+            </div>
+          )}
         </div>
         <button
           className="text-button session-exit"

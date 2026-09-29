@@ -7,7 +7,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { api, errorMessage } from "./api";
-import type { ReplyMode, Session } from "./types";
+import type { ReplyMode, RouteStageId, Session } from "./types";
 import { Brand, Loading, Modal } from "./components/UI";
 import { SessionPage } from "./components/SessionPage";
 import { HistoryPage } from "./components/HistoryPage";
@@ -49,6 +49,8 @@ export function App() {
   const [logoutBusy, setLogoutBusy] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [catalogVersion, setCatalogVersion] = useState(0);
+  const [practiceRouteStage, setPracticeRouteStage] =
+    useState<RouteStageId | null>(null);
   const authRequest = useRef(0);
   const refresh = useCallback(async () => {
     const request = ++refreshRequest.current;
@@ -195,9 +197,18 @@ export function App() {
   const progress = progressRoute(route);
   const sessionId = route.startsWith("/session/") ? route.split("/")[2] : null;
   const openSession = (session: Session) => {
+    if (session.route_stage) setPracticeRouteStage(null);
     void refresh();
     navigate(sessionDestination(session));
   };
+  function startRoutePractice(stage: RouteStageId | null) {
+    setPracticeRouteStage(stage);
+    navigate("/");
+  }
+  function startGeneralPractice() {
+    setPracticeRouteStage(null);
+    navigate("/");
+  }
   async function retryFromCabinet(id: string) {
     const owner = identity.current;
     const navigation = navigationSequence.current;
@@ -418,7 +429,8 @@ export function App() {
             reviewId={progress.reviewId}
             onReview={(id) => navigate(`/progress/${encodeURIComponent(id)}`)}
             onOpen={(id) => navigate(`/session/${id}`)}
-            onPractice={() => navigate("/")}
+            onPractice={startGeneralPractice}
+            onRoutePractice={startRoutePractice}
             onRetry={retryFromCabinet}
           />
         ) : history ? (
@@ -447,6 +459,7 @@ export function App() {
               onStart={openSession}
               liveAvailable={liveAvailable}
               liveReplyMode={liveReplyMode}
+              routeStage={practiceRouteStage}
             />
           </>
         )}

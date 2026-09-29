@@ -1,4 +1,6 @@
 import { request } from "./api";
+import type { RouteStageId } from "./types";
+export type { RouteStageId } from "./types";
 
 export type AssistanceKind = "guided" | "independent" | "unknown";
 export type SkillStatus = "observed" | "not_observed" | "not_practiced";
@@ -10,6 +12,10 @@ export type ProgressEvidence = {
   title: string;
   created_at: string | null;
   completed_at: string | null;
+  delivery_tone?: "hostile" | "constructive" | "neutral" | null;
+  delivery_label?: string | null;
+  delivery_quote?: string | null;
+  client_reply?: string | null;
 };
 export type ProgressSkill = {
   id: string;
@@ -47,6 +53,41 @@ export type ProgressRecommendation = {
   reason: string;
   session_id: string | null;
 };
+export const ROUTE_STAGE_GUIDANCE: Record<
+  RouteStageId,
+  { title: string; goal: string }
+> = {
+  discover: {
+    title: "Выяснить интересы",
+    goal: "Задайте прямой вопрос об интересе или ограничении клиента и проверьте, что правильно его поняли.",
+  },
+  explain: {
+    title: "Обосновать предложение",
+    goal: "Свяжите предложение с конкретной задачей клиента и объясните, какой результат оно сохранит.",
+  },
+  objection: {
+    title: "Ответить на возражение",
+    goal: "После отказа выясните, что не подходит, и предложите встречный шаг.",
+  },
+  independent: {
+    title: "Самостоятельные переговоры",
+    goal: "В одной беседе выясните интерес, обоснуйте предложение и ответьте на возражение без подсказок.",
+  },
+};
+export type NegotiatorRoute = {
+  title: string;
+  completed_stages: number;
+  total_stages: number;
+  active_stage: RouteStageId | null;
+  rule: string;
+  stages: {
+    id: RouteStageId;
+    title: string;
+    challenge: string;
+    status: "complete" | "available" | "locked";
+    evidence: Pick<ProgressEvidence, "session_id" | "quote" | "title">[];
+  }[];
+};
 export type PracticeProgress = {
   scope: "all_owner_history";
   summary: {
@@ -74,6 +115,7 @@ export type PracticeProgress = {
     current: ProgressComparisonPoint | null;
   };
   recommendation: ProgressRecommendation;
+  negotiator_route: NegotiatorRoute;
 };
 
 export const progressApi = {

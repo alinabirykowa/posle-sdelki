@@ -16,6 +16,60 @@ def say(session, text):
     return reply
 
 
+def practice_session(scenario="scope", priority="deadline"):
+    session = new_session(scenario, priority, "standard", "demo")
+    session["scenario"]["practice_model"] = "conversation"
+    return session
+
+
+def test_repeated_gibberish_is_quoted_and_does_not_advance_to_a_proposal():
+    session = practice_session()
+    first = say(session, "вавотфвэфй")
+    second = say(session, "вавотфвэфй")
+
+    assert "«вавотфвэфй»" in first.lower()
+    assert "случайный набор букв" in first.lower()
+    assert "реплика не засчитана" in first.lower()
+    assert "«вавотфвэфй»" in second.lower()
+    assert "снова нет распознаваемого ответа" in second.lower()
+    assert "не засчитывается" in second.lower()
+    assert "перейдём к вашему варианту решения" not in second.lower()
+    assert first != second
+    assert session["turns"] == 2
+    assert session["status"] == "active"
+    assert not session.get("proposal")
+
+
+def test_repeated_vague_replies_stop_repeating_the_client_question():
+    session = practice_session()
+    first = say(session, "Посмотрим.")
+    second = say(session, "Посмотрим.")
+
+    assert "не могу понять" in first.lower()
+    assert "перейдём к следующему шагу" in second.lower()
+    assert first != second
+
+
+def test_repeated_short_acknowledgement_moves_from_ack_to_a_proposal_prompt():
+    session = practice_session()
+    first = say(session, "Окей.")
+    second = say(session, "Окей.")
+
+    assert "спасибо" in first.lower()
+    assert "перейдём к следующему шагу" in second.lower()
+    assert first != second
+
+
+def test_rude_reply_gets_a_boundary_instead_of_another_discovery_question():
+    session = practice_session()
+    first = say(session, "Вы идиот.")
+    second = say(session, "Вы идиот.")
+
+    assert "без личной оценки" in first.lower()
+    assert "не буду менять условия под давлением" in second.lower()
+    assert first != second
+
+
 @pytest.mark.parametrize("scenario,priority,keyword,detail", [
     ("scope", "deadline", "Про сроки", "20 часов приоритетных новых"),
     ("scope", "full_scope", "Про объём", "все 40 часов новых"),

@@ -222,3 +222,18 @@ test("a lost configured-start response can be retried after reload with the same
   reloadedPage.clear(pendingKey, recovered.id);
   assert.equal(reloadedPage.read(pendingKey).id, differentMode.id);
 });
+
+test("a route practice start sends its saved focus stage", async (t) => {
+  let body;
+  t.mock.method(globalThis, "fetch", async (_url, init) => {
+    body = JSON.parse(init.body);
+    return new Response(JSON.stringify({ id: "route-session" }));
+  });
+  await api.trainingStart(config, "demo", "route-start", "explain");
+  assert.deepEqual(body, {
+    configuration: config,
+    mode: "demo",
+    client_action_id: "route-start",
+    route_stage: "explain",
+  });
+});

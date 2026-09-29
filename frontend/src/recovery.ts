@@ -1,4 +1,4 @@
-import type { TrainingConfig } from "./types";
+import type { RouteStageId, TrainingConfig } from "./types";
 
 type PendingAction = { id: string; payload: string };
 type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -185,7 +185,14 @@ export type PendingTrainingStart = {
   id: string;
   configuration: TrainingConfig;
   mode: "demo" | "live";
+  route_stage?: RouteStageId;
 };
+
+function isRouteStageId(value: unknown): value is RouteStageId {
+  return ["discover", "explain", "objection", "independent"].includes(
+    String(value),
+  );
+}
 
 function isTrainingConfig(value: unknown): value is TrainingConfig {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -228,8 +235,12 @@ export function readPendingTrainingStart(
     if (!payload || typeof payload !== "object" || Array.isArray(payload))
       return null;
     const record = payload as Record<string, unknown>;
+    const keys = Object.keys(record);
     if (
-      Object.keys(record).length !== 2 ||
+      !(
+        keys.length === 2 ||
+        (keys.length === 3 && isRouteStageId(record.route_stage))
+      ) ||
       !isTrainingConfig(record.configuration) ||
       (record.mode !== "demo" && record.mode !== "live")
     )
@@ -239,6 +250,9 @@ export function readPendingTrainingStart(
       id: pending.id,
       configuration: record.configuration,
       mode: record.mode,
+      ...(isRouteStageId(record.route_stage)
+        ? { route_stage: record.route_stage }
+        : {}),
     };
   } catch {
     return null;
@@ -250,14 +264,26 @@ export function getPendingTrainingStart(
   configuration: TrainingConfig,
   mode: "demo" | "live",
   actions = pendingActions,
+  routeStage?: RouteStageId,
 ): PendingTrainingStart {
   const pending = readPendingTrainingStart(identityKey, actions);
   if (pending) return pending;
   const key = `pending-training-start:${identityKey}`;
   const invalid = actions.read(key);
   if (invalid) actions.clear(key, invalid.id);
-  const action = actions.get(key, JSON.stringify({ configuration, mode }));
-  return { key, id: action.id, configuration: { ...configuration }, mode };
+  const payload = {
+    configuration,
+    mode,
+    ...(routeStage ? { route_stage: routeStage } : {}),
+  };
+  const action = actions.get(key, JSON.stringify(payload));
+  return {
+    key,
+    id: action.id,
+    configuration: { ...configuration },
+    mode,
+    ...(routeStage ? { route_stage: routeStage } : {}),
+  };
 }
 
 export function clearPendingTrainingStart(

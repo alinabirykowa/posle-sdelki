@@ -162,6 +162,8 @@ def _justifies(event, proposals):
     # One spoken sentence can both propose an approach and explain its value.
     # Credit the explanation only after the same evidence/quotation/negation
     # checks as a dedicated justification. Proposal cards never reach here.
+    if event.get("delivery_tone") == "hostile":
+        return False
     if event["intent"] not in {"justify", "propose"} or event["focus"] not in {"terms", "constraint", "interest"}:
         return False
     # Quoting a client's argument or saying "I will not explain" is not the
@@ -175,6 +177,8 @@ def _justifies(event, proposals):
 
 
 def _asks_own_question(event):
+    if event.get("delivery_tone") == "hostile":
+        return False
     unquoted = _own_evidence(event)
     if len(unquoted.split()) < 2 or _DENIED_QUESTION.search(_QUOTED.sub(" ", event["message"]["text"])):
         return False

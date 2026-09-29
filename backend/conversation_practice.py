@@ -111,6 +111,102 @@ def proposal_verdict(session, option_id):
     raise ValueError("Unknown conversation proposal")
 
 
+_REPAIR_ISSUES = {
+    "unintelligible", "off_topic", "unanswered_question", "partial_answer",
+    "insufficient_context", "vague", "rudeness", "inappropriate_language",
+    "disparaging_language", "informal_language", "low_specificity", "risky_promise",
+}
+
+
+def requires_repair(review):
+    if not review:
+        return False
+    return bool(
+        set(review.get("issues") or ()) & _REPAIR_ISSUES
+        or (review.get("delivery") or {}).get("tone") == "hostile"
+    )
+
+
+def repair_reply(session, review, consecutive_repairs):
+    """Give an actionable next move when a turn cannot advance the discussion.
+
+    Bad wording stays in the transcript for review, but it should not make the
+    client replay the same discovery question or advance the business scenario.
+    """
+    if not review:
+        return None
+    issues = set(review.get("issues") or ())
+    delivery = review.get("delivery") or {}
+    if not requires_repair(review):
+        return None
+
+    if delivery.get("tone") == "hostile" or issues.intersection(
+        {"rudeness", "inappropriate_language", "disparaging_language", "informal_language"}
+    ):
+        if consecutive_repairs <= 1:
+            return (
+                "Мне сложно продолжать обсуждение в таком тоне. Я пока не буду раскрывать дополнительные детали "
+                "и согласовывать вариант. Переформулируйте несогласие без личной оценки и назовите конкретное условие."
+            )
+        return (
+            "Мы снова остановились из-за тона. Я не буду менять условия под давлением. "
+            "Чтобы продолжить, переформулируйте возражение нейтрально и предложите следующий шаг."
+        )
+
+    if "unintelligible" in issues:
+        problems = review.get("problems") or []
+        flagged = next((problem.get("quote") for problem in problems if problem.get("quote")), None)
+        quote = flagged or review.get("quote") or "ваш текст"
+        if consecutive_repairs <= 1:
+            return (
+                f"«{quote}» выглядит как случайный набор букв: по нему нельзя понять вашу позицию. "
+                "Эта реплика не засчитана, и сценарий остаётся на текущем шаге. "
+                "Напишите понятный ответ или обозначьте, что нужно проверить; например: "
+                "«Я уточню, что могу предложить с нашей стороны, и вернусь с конкретным вариантом»."
+            )
+        return (
+            f"В реплике «{quote}» снова нет распознаваемого ответа — это случайный ввод, а не деловая позиция. "
+            "Поэтому переговоры не продвинулись и предложение решения пока не засчитывается. "
+            "Замените набор букв осмысленной фразой: ответьте на текущий вопрос или скажите, что именно проверите."
+        )
+
+    if "off_topic" in issues:
+        if consecutive_repairs <= 1:
+            return (
+                "Эта реплика не относится к нашей ситуации, поэтому я не могу учесть её как ответ клиенту. "
+                "Сценарий остаётся на текущем шаге. Вернитесь к запросу клиента и назовите, что хотите уточнить или предложить."
+            )
+        return (
+            "Мы снова ушли от условий этого кейса, поэтому переговоры не продвинулись. "
+            "Напишите один конкретный следующий шаг по запросу клиента; случайная или посторонняя фраза не засчитывается."
+        )
+
+    if issues.intersection({"unanswered_question", "partial_answer", "insufficient_context", "vague"}):
+        if consecutive_repairs <= 1:
+            return (
+                "Я услышал ваш ответ, но пока не могу понять, какое именно условие вы подтверждаете "
+                "или предлагаете изменить. Если точных данных нет, скажите, что нужно проверить; "
+                "затем обозначьте, какой вариант готовы обсудить."
+            )
+        return (
+            "Чтобы не ходить по кругу, перейдём к следующему шагу: сформулируйте свой вариант "
+            "и объясните, как он учитывает запрос клиента. Если ответ пока неизвестен, обозначьте, "
+            "что именно вы проверите перед подтверждением условий."
+        )
+
+    if "risky_promise" in issues:
+        return (
+            "Я услышал ваше обещание, но пока не считаю его подтверждённым условием. "
+            "Предложите, что вы сначала проверите со своей стороны, и какой вариант можно будет обсудить после проверки."
+        )
+    if "low_specificity" in issues:
+        return (
+            "Пока неясно, что именно вы предлагаете. Назовите свою позицию, коротко объясните причину "
+            "и предложите следующий шаг по нашей ситуации."
+        )
+    return None
+
+
 def reply(session, analysis, interest, was_discovered):
     """All branches use the current semantic snapshot, never legacy terms."""
     proposal = session.get("proposal")

@@ -21,6 +21,17 @@ SKILLS = (
     ("responded_to_objection", "Ответ на возражение"),
 )
 
+ROUTE_STAGES = (
+    {"id": "discover", "title": "Выяснить интересы", "skill_ids": ("clarified_need",),
+     "challenge": "Задайте клиенту прямой вопрос об интересе или ограничении и проверьте, что правильно его поняли."},
+    {"id": "explain", "title": "Обосновать предложение", "skill_ids": ("justified_proposal",),
+     "challenge": "Свяжите своё предложение с конкретной задачей клиента и ожидаемым результатом."},
+    {"id": "objection", "title": "Ответить на возражение", "skill_ids": ("responded_to_objection",),
+     "challenge": "После отказа выясните, что не подходит, и предложите встречный шаг."},
+    {"id": "independent", "title": "Провести переговоры самостоятельно", "skill_ids": tuple(item[0] for item in SKILLS),
+     "challenge": "В самостоятельной попытке покажите все три приёма: выяснение интереса, аргументацию и ответ на возражение."},
+)
+
 
 def _time(value):
     try:
@@ -73,6 +84,11 @@ def _summary(session):
 def _evidence(session, candidates, transcript):
     result = []
     seen = set()
+    review_by_message = {
+        item.get("message_id"): item
+        for item in (session.get("feedback") or {}).get("utterance_reviews", [])
+        if isinstance(item, dict) and isinstance(item.get("message_id"), str)
+    }
     for candidate in candidates if isinstance(candidates, list) else []:
         if not isinstance(candidate, dict):
             continue
@@ -86,10 +102,29 @@ def _evidence(session, candidates, transcript):
         if (message_id, quote) in seen:
             continue
         seen.add((message_id, quote))
+        position = reference[0]
+        client_reply = None
+        for next_position in range(position + 1, len(session.get("messages", []))):
+            next_message = session["messages"][next_position]
+            if not isinstance(next_message, dict):
+                continue
+            if next_message.get("role") == "user":
+                break
+            if next_message.get("role") == "assistant" and isinstance(next_message.get("text"), str):
+                client_reply = next_message["text"]
+                break
+        review = review_by_message.get(message_id)
+        delivery = review.get("delivery") if isinstance(review, dict) else None
+        if not isinstance(delivery, dict) or delivery.get("tone") not in {"hostile", "constructive", "neutral"}:
+            delivery = None
         result.append({
             "session_id": session["id"], "message_id": message_id, "quote": quote,
             "assistance": _assistance(session)[0], "title": session.get("scenario", {}).get("title", "Разговор"),
             "created_at": session.get("created_at"), "completed_at": session.get("completed_at"),
+            "delivery_tone": delivery.get("tone") if delivery else None,
+            "delivery_label": delivery.get("label") if delivery else None,
+            "delivery_quote": delivery.get("quote") if delivery else None,
+            "client_reply": client_reply,
         })
     return result
 
@@ -117,7 +152,7 @@ def _comparison_key(session):
         return None
     # The same assistance label can hide unused guided mode and actual advice;
     # retain mode + used so those attempts are not compared as equivalent.
-    return (context, session.get("mode", "demo"), session.get("reply_mode", "rules"), mentor_mode, used, session.get("_engine_version"), session.get("max_turns", 30), session.get("extra_turns", 0))
+    return (context, session.get("mode", "demo"), session.get("reply_mode", "rules"), mentor_mode, used, session.get("_engine_version"), session.get("max_turns", 30), session.get("extra_turns", 0), session.get("route_stage"))
 
 
 def _has_observation(session):
@@ -160,6 +195,63 @@ def _recommendation(conversations, ai_available):
     return {"kind": "start", "label": "Начать тренировку", "reason": "Выберите ситуацию и попробуйте разговор. После завершения здесь появятся наблюдения с примерами ваших реплик.", "session_id": None}
 
 
+def _negotiator_route(conversations):
+    completed = sorted(
+        (item for item in conversations if item.get("status") == "completed"),
+        key=_completion_key,
+        reverse=True,
+    )
+    observed = {skill_id: [] for skill_id, _ in SKILLS}
+    independent_complete = False
+    for session in completed:
+        assistance, _, _ = _assistance(session)
+        snapshots = {item["id"]: item for item in _observations(session)}
+        for skill_id in observed:
+            snapshot = snapshots.get(skill_id)
+            if snapshot and snapshot["status"] == "observed":
+                observed[skill_id].extend(snapshot["evidence"])
+        if assistance == "independent" and all(
+            snapshots.get(skill_id, {}).get("status") == "observed"
+            for skill_id, _ in SKILLS
+        ):
+            independent_complete = True
+
+    stages = []
+    earlier_complete = True
+    completed_count = 0
+    active_stage = None
+    for index, definition in enumerate(ROUTE_STAGES):
+        if definition["id"] == "independent":
+            requirement_met = independent_complete
+        else:
+            requirement_met = all(observed[skill_id] for skill_id in definition["skill_ids"])
+        unlocked = earlier_complete
+        is_complete = requirement_met and unlocked
+        status = "complete" if is_complete else "available" if unlocked else "locked"
+        if is_complete:
+            completed_count += 1
+        elif unlocked and active_stage is None:
+            active_stage = definition["id"]
+        evidence = []
+        for skill_id in definition["skill_ids"]:
+            if is_complete and observed.get(skill_id):
+                evidence.extend(observed[skill_id][:1])
+        stages.append({
+            "id": definition["id"], "title": definition["title"],
+            "challenge": definition["challenge"], "status": status,
+            "evidence": evidence,
+        })
+        earlier_complete = earlier_complete and is_complete
+    return {
+        "title": "Маршрут переговорщика",
+        "completed_stages": completed_count,
+        "total_stages": len(stages),
+        "active_stage": active_stage,
+        "stages": stages,
+        "rule": "Этап засчитывается только по сохранённым репликам с подтверждённым примером. Очки и серии не начисляются.",
+    }
+
+
 def build_progress(sessions, *, ai_available=False):
     """Aggregate only supplied owner-scoped records without changing any data."""
     latest_completed = max((session for session in sessions if session["status"] == "completed"), key=_completion_key, default=None)
@@ -199,6 +291,7 @@ def build_progress(sessions, *, ai_available=False):
             "reason": "Наблюдения по одной ситуации с одинаковым режимом и условиями помощи." if key else "Наблюдения только по последней попытке; сравнение недоступно." if current else "Начните с первой тренировки.",
         },
         "skills": _aggregate_skills(group),
+        "negotiator_route": _negotiator_route(conversations),
         "comparison": {"eligible": eligible, "reason": reason, "previous": _point(previous) if eligible else None, "current": _point(current) if current else None},
         "recommendation": _recommendation(conversations, ai_available),
     }

@@ -110,6 +110,38 @@
   line-height: 1.2;
   letter-spacing: -1.4px;
 }
+.session-route-goal {
+  max-width: 690px;
+  margin-top: 11px;
+  padding: 12px 14px;
+  border-left: 2px solid #c83c17;
+  background: #fff8f1;
+}
+.session-route-step {
+  display: block;
+  margin-bottom: 3px;
+  color: #77665a;
+  font-size: 12px;
+  font-weight: 650;
+}
+.session-route-goal strong {
+  display: block;
+  color: #913819;
+  font-size: 12px;
+}
+.session-route-goal p {
+  margin: 4px 0 0;
+  color: #5f5147;
+  font-size: 12px;
+  line-height: 1.55;
+}
+.session-route-reward {
+  display: block;
+  margin-top: 6px;
+  color: #77665a;
+  font-size: 12px;
+  line-height: 1.5;
+}
 .session-page .session-heading .eyebrow {
   color: #66665f;
   font-size: 12px;
@@ -810,28 +842,37 @@
     padding: 18px 16px 24px;
   }
   .session-page .session-nav {
+    align-items: center;
+    flex-wrap: wrap;
     gap: 12px;
     margin-bottom: 14px;
   }
   .session-page .saved-label {
-    font-size: 12px;
+    font-size: 13px;
   }
   .session-page .session-heading {
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
     gap: 12px;
+  }
+  .session-page .session-heading > div {
+    min-width: 0;
   }
   .session-page .session-heading h1 {
     max-width: none;
     font-size: 26px;
     letter-spacing: -1px;
+    overflow-wrap: anywhere;
   }
   .session-page .session-heading .session-exit {
-    align-self: flex-start;
-    max-width: 108px;
+    align-self: start;
+    justify-self: start;
+    max-width: none;
     gap: 6px;
-    padding: 2px 0;
+    padding: 8px 0;
     border: 0;
-    font-size: 12px;
+    font-size: 13px;
     text-align: left;
   }
   .session-page .session-heading .session-exit > svg {
@@ -920,10 +961,10 @@
     font-size: 12px;
   }
   .session-page .client-info strong {
-    font-size: 13px;
+    font-size: 14px;
   }
   .session-page .client-info > span {
-    font-size: 12px;
+    font-size: 13px;
   }
   .session-page .conversation-header .mode-badge {
     padding: 5px 7px;
@@ -950,8 +991,8 @@
   }
   .session-page .bubble {
     padding: 12px 15px;
-    font-size: 13px;
-    line-height: 1.75;
+    font-size: 15px;
+    line-height: 1.6;
   }
   .session-page .conversation-input {
     padding: 14px 12px 9px;
@@ -969,7 +1010,7 @@
     font-size: 16px;
   }
   .session-page .conversation-input textarea::placeholder {
-    font-size: 12px;
+    font-size: 14px;
   }
   .session-page .send-button {
     width: 38px;

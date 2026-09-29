@@ -186,6 +186,19 @@ test('training lost-response recovery preserves the original payload until an ex
   assert.equal(newStart.mode, 'live');
 });
 
+test('route-stage goals survive a lost training-start response', () => {
+  const saved = storage();
+  const firstPage = createPendingActions(() => saved, uuid);
+  const pending = getPendingTrainingStart(
+    'account-a', trainingConfig, 'demo', firstPage, 'objection',
+  );
+  assert.equal(pending.route_stage, 'objection');
+  assert.deepEqual(
+    readPendingTrainingStart('account-a', createPendingActions(() => saved, uuid)),
+    pending,
+  );
+});
+
 test('training starts are isolated by identity and never adopt the legacy global request', () => {
   const saved = storage();
   const actions = createPendingActions(() => saved, uuid);

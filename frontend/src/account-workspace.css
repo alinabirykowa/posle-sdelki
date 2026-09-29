@@ -423,7 +423,14 @@
     height: 24px;
   }
   .studio-nav {
-    gap: 16px;
+    display: grid;
+    grid-template-columns: max-content max-content;
+    grid-auto-flow: row;
+    align-content: start;
+    justify-content: start;
+    gap: 0 18px;
+    height: auto;
+    padding-bottom: 4px;
   }
   .studio-nav > a {
     font-size: 11px;
